@@ -46,6 +46,11 @@ variable "blob_container_name" {
   description = "Name of the blob container used for data read/write operations."
   type        = string
   default     = "data"
+
+  validation {
+    condition     = can(regex("^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$", var.blob_container_name))
+    error_message = "blob_container_name must be 3-63 characters, contain only lowercase letters, numbers, or hyphens, and start and end with a letter or number."
+  }
 }
 
 variable "tags" {
