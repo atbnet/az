@@ -1,0 +1,19 @@
+# Terraform working directory
+.terraform/
+.terraform.lock.hcl
+
+# State files – use remote state (e.g. Azure Storage) in real deployments
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variable files that may contain secrets
+terraform.tfvars
+*.auto.tfvars
+
+# Generated zip packages
+*.zip
+
+# OS artefacts
+.DS_Store
+Thumbs.db

@@ -1,0 +1,11 @@
+subscription_id     = "00000000-0000-0000-0000-000000000000"
+name                = "blobfunc"
+environment         = "dev"
+location            = "eastus"
+python_version      = "3.11"
+blob_container_name = "data"
+
+tags = {
+  owner   = "your-team"
+  project = "blob-function-demo"
+}
