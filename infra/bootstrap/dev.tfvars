@@ -1,10 +1,10 @@
 env = "dev"
 
 # Fill these in before running:
-# tenant_id       = "00000000-0000-0000-0000-000000000000"
-# subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "2fa2ec5a-717a-4157-8e6c-f3ec61fed660"
+subscription_id = "8028ce6e-7b64-4530-bb6e-2074b6d9f8f8"
 
-location = "westeurope"
+location = "swedencentral"
 
 github_owner = "atbnet"
 github_repo  = "az"

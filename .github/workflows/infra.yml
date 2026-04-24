@@ -192,7 +192,7 @@ jobs:
           name: tfplan-${{ env.ENV }}
           path: infra/
       - run: terraform -chdir=infra init -backend-config="envs/backends/${ENV}.hcl" -reconfigure
-      - run: terraform -chdir=infra apply -auto-approve tfplan
+      - run: terraform -chdir=infra apply -auto-approve
       - id: tfout
         run: |
           clusters=$(terraform -chdir=infra output -json clusters | jq -c .)
