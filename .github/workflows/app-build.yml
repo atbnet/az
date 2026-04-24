@@ -91,6 +91,23 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
+      - name: Resolve state storage account
+        run: |
+          hcl="infra/envs/backends/${ENV}.hcl"
+          if grep -q REPLACE_AFTER_BOOTSTRAP "$hcl"; then
+            rg="rg-web-tfstate-${ENV}"
+            sa=$(az storage account list --resource-group "$rg" --query "[?tags.env=='${ENV}'] | [0].name" -o tsv 2>/dev/null || true)
+            if [ -z "$sa" ]; then
+              sa=$(az storage account list --resource-group "$rg" --query "[0].name" -o tsv 2>/dev/null || true)
+            fi
+            if [ -z "$sa" ]; then
+              echo "::error::No state storage account found in resource group '$rg'. Has 'infra/bootstrap' been applied for env='${ENV}'?"
+              exit 1
+            fi
+            echo "Using state storage account: $sa"
+            sed -i "s/REPLACE_AFTER_BOOTSTRAP/$sa/" "$hcl"
+          fi
+
       - name: Read ACR login server from terraform state
         id: tfout
         run: |
