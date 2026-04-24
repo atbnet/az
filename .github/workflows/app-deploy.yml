@@ -1,0 +1,164 @@
+name: app-deploy
+
+on:
+  workflow_run:
+    workflows: [app-build]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Target environment"
+        type: choice
+        options: [dev, prd]
+        default: dev
+      image_tag:
+        description: "Image tag to deploy (defaults to latest for the env)"
+        type: string
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+env:
+  TF_VERSION: "1.13.0"
+  HELM_VERSION: "v3.16.4"
+
+jobs:
+  resolve:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      env: ${{ steps.pick.outputs.env }}
+      image_tag: ${{ steps.pick.outputs.image_tag }}
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      - id: pick
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_ENV: ${{ inputs.env }}
+          DISPATCH_TAG: ${{ inputs.image_tag }}
+          WR_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WR_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            env="${DISPATCH_ENV}"
+            tag="${DISPATCH_TAG:-${env}-latest}"
+            sha="${GITHUB_SHA}"
+          else
+            case "$WR_BRANCH" in
+              dev)  env="dev" ;;
+              main) env="prd" ;;
+              *)    echo "unsupported branch: $WR_BRANCH" >&2; exit 1 ;;
+            esac
+            tag="${WR_SHA}"
+            sha="${WR_SHA}"
+          fi
+          {
+            echo "env=${env}"
+            echo "image_tag=${tag}"
+            echo "sha=${sha}"
+          } >> "$GITHUB_OUTPUT"
+
+  plan:
+    name: read cluster list
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve.outputs.env }}
+    outputs:
+      clusters: ${{ steps.tfout.outputs.clusters }}
+      acr_login_server: ${{ steps.tfout.outputs.acr_login_server }}
+    env:
+      ENV: ${{ needs.resolve.outputs.env }}
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - id: tfout
+        run: |
+          terraform -chdir=infra init \
+            -backend-config="envs/backends/${ENV}.hcl" \
+            -reconfigure -input=false
+          clusters=$(terraform -chdir=infra output -json clusters | jq -c .)
+          acr=$(terraform -chdir=infra output -raw acr_login_server)
+          {
+            echo "clusters=${clusters}"
+            echo "acr_login_server=${acr}"
+          } >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: [resolve, plan]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve.outputs.env }}
+    concurrency:
+      group: app-deploy-${{ needs.resolve.outputs.env }}
+      cancel-in-progress: false
+    env:
+      ENV: ${{ needs.resolve.outputs.env }}
+      IMAGE_TAG: ${{ needs.resolve.outputs.image_tag }}
+      ACR: ${{ needs.plan.outputs.acr_login_server }}
+      CLUSTERS_JSON: ${{ needs.plan.outputs.clusters }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - uses: azure/use-kubelogin@v1
+        with:
+          kubelogin-version: v0.1.4
+
+      - name: Deploy to every regional cluster
+        run: |
+          set -euo pipefail
+          echo "$CLUSTERS_JSON" | jq -c 'to_entries[]' | while read -r entry; do
+            region=$(jq -r .key <<<"$entry")
+            rg=$(jq -r .value.resource_group <<<"$entry")
+            aks=$(jq -r .value.aks_name <<<"$entry")
+            frontend=$(jq -r .value.agc_frontend_name <<<"$entry")
+            subnet=$(jq -r .value.alb_subnet_id <<<"$entry")
+
+            values_file="deploy/chart/values-${ENV}-${region}.yaml"
+            if [ ! -f "$values_file" ]; then
+              echo "missing values file $values_file" >&2
+              exit 1
+            fi
+
+            echo "::group::deploy to $aks ($region)"
+            az aks get-credentials --resource-group "$rg" --name "$aks" --overwrite-existing --only-show-errors
+            kubelogin convert-kubeconfig -l azurecli
+
+            kubectl create namespace web --dry-run=client -o yaml | kubectl apply -f -
+
+            helm upgrade --install web deploy/chart \
+              --namespace web \
+              -f "$values_file" \
+              --set image.repository="${ACR}/web" \
+              --set image.tag="${IMAGE_TAG}" \
+              --set appVersion="${IMAGE_TAG}" \
+              --set agc.frontendName="${frontend}" \
+              --set agc.subnetId="${subnet}" \
+              --atomic \
+              --timeout 5m
+
+            kubectl -n web rollout status deploy/web --timeout=5m
+            echo "::endgroup::"
+          done
