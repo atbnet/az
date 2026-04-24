@@ -1,0 +1,22 @@
+apiVersion: alb.networking.azure.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: {{ include "web.fullname" . }}
+  labels: {{- include "web.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ include "web.fullname" . }}
+  default:
+    interval: {{ .Values.healthCheck.intervalSeconds }}s
+    timeout: {{ .Values.healthCheck.timeoutSeconds }}s
+    healthyThreshold: {{ .Values.healthCheck.healthyThreshold }}
+    unhealthyThreshold: {{ .Values.healthCheck.unhealthyThreshold }}
+    port: {{ .Values.service.targetPort }}
+    http:
+      path: {{ .Values.healthCheck.path | quote }}
+      match:
+        statusCodes:
+          - start: 200
+            end: 299

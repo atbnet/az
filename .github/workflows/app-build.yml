@@ -1,0 +1,151 @@
+name: app-build
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - "app/**"
+      - ".github/workflows/app-build.yml"
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Target environment"
+        type: choice
+        options: [dev, prd]
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.13.0"
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      env: ${{ steps.pick.outputs.env }}
+    steps:
+      - id: pick
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_HEAD: ${{ github.ref_name }}
+          DISPATCH_ENV: ${{ inputs.env }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "env=${DISPATCH_ENV}" >> "$GITHUB_OUTPUT"
+          else
+            case "$REF_HEAD" in
+              dev)  echo "env=dev" >> "$GITHUB_OUTPUT" ;;
+              main) echo "env=prd" >> "$GITHUB_OUTPUT" ;;
+              *)    echo "unsupported branch: $REF_HEAD" >&2; exit 1 ;;
+            esac
+          fi
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve.outputs.env }}
+    concurrency:
+      group: app-build-${{ needs.resolve.outputs.env }}-${{ github.sha }}
+      cancel-in-progress: false
+    outputs:
+      image: ${{ steps.export.outputs.image }}
+      tag: ${{ steps.export.outputs.tag }}
+      acr_login_server: ${{ steps.tfout.outputs.acr_login_server }}
+    env:
+      ENV: ${{ needs.resolve.outputs.env }}
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Azure credentials are set
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          missing=""
+          for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!v:-}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing Azure credentials for env='${ENV}':${missing}."
+            echo "::error::Set them as secrets OR variables on GitHub Environment '${ENV}'."
+            exit 1
+          fi
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Resolve state storage account
+        run: |
+          hcl="infra/envs/backends/${ENV}.hcl"
+          if grep -q REPLACE_AFTER_BOOTSTRAP "$hcl"; then
+            rg="rg-web-tfstate-${ENV}"
+            sa=$(az storage account list --resource-group "$rg" --query "[?tags.env=='${ENV}'] | [0].name" -o tsv 2>/dev/null || true)
+            if [ -z "$sa" ]; then
+              sa=$(az storage account list --resource-group "$rg" --query "[0].name" -o tsv 2>/dev/null || true)
+            fi
+            if [ -z "$sa" ]; then
+              echo "::error::No state storage account found in resource group '$rg'. Has 'infra/bootstrap' been applied for env='${ENV}'?"
+              exit 1
+            fi
+            echo "Using state storage account: $sa"
+            sed -i "s/REPLACE_AFTER_BOOTSTRAP/$sa/" "$hcl"
+          fi
+
+      - name: Read ACR login server from terraform state
+        id: tfout
+        run: |
+          terraform -chdir=infra init \
+            -backend-config="envs/backends/${ENV}.hcl" \
+            -reconfigure -input=false
+          acr=$(terraform -chdir=infra output -raw acr_login_server)
+          echo "acr_login_server=${acr}" >> "$GITHUB_OUTPUT"
+
+      - name: ACR login
+        run: az acr login --name "${{ steps.tfout.outputs.acr_login_server }}"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app
+          file: ./app/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+          tags: |
+            ${{ steps.tfout.outputs.acr_login_server }}/web:${{ github.sha }}
+            ${{ steps.tfout.outputs.acr_login_server }}/web:${{ needs.resolve.outputs.env }}-latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Expose image ref
+        id: export
+        run: |
+          {
+            echo "image=${{ steps.tfout.outputs.acr_login_server }}/web:${{ github.sha }}"
+            echo "tag=${{ github.sha }}"
+          } >> "$GITHUB_OUTPUT"
