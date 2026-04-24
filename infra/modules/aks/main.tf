@@ -42,7 +42,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   network_profile {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
-    network_dataplane   = "cilium"
+    network_data_plane  = "cilium"
     network_policy      = "cilium"
     pod_cidr            = var.pod_cidr
     service_cidr        = var.service_cidr
@@ -145,7 +145,7 @@ resource "azurerm_monitor_diagnostic_setting" "aks" {
   enabled_log {
     category = "guard"
   }
-  metric {
+  enabled_metric {
     category = "AllMetrics"
   }
 }
