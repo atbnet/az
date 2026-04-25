@@ -14,8 +14,8 @@ regions = {
     node_min     = 2
     node_max     = 5
   }
-  uks = {
-    location     = "uksouth"
+  noe = {
+    location     = "norwayeast"
     vnet_cidr    = "10.20.0.0/16"
     node_vm_size = "Standard_D2ds_v5"
     node_min     = 2
