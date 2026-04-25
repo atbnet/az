@@ -240,7 +240,7 @@ jobs:
             sed -i "s/REPLACE_AFTER_BOOTSTRAP/$sa/" "$hcl"
           fi
       - run: terraform -chdir=infra init -backend-config="envs/backends/${ENV}.hcl" -reconfigure
-      - run: terraform -chdir=infra apply -auto-approve
+      - run: terraform -chdir=infra apply -auto-approve tfplan
       - id: tfout
         run: |
           clusters=$(terraform -chdir=infra output -json clusters | jq -c .)
