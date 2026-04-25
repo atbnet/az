@@ -222,7 +222,6 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: tfplan-${{ env.ENV }}
-          path: infra/
       - name: Resolve state storage account
         run: |
           hcl="infra/envs/backends/${ENV}.hcl"
