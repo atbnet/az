@@ -18,7 +18,7 @@ variable "tenant_id" {
 }
 
 variable "regions" {
-  description = "Map of regional deployments keyed by region_key (e.g. weu, neu)."
+  description = "Map of regional deployments keyed by region_key (e.g. swc, usw)."
   type = map(object({
     location     = string
     vnet_cidr    = string
@@ -35,7 +35,7 @@ variable "regions" {
 variable "primary_region_key" {
   description = "Key within var.regions whose location anchors global resources (ACR, AFD, global RG)."
   type        = string
-  default     = "weu"
+  default     = "swc"
 }
 
 variable "log_retention_days" {
