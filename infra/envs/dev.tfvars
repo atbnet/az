@@ -4,18 +4,18 @@ env = "dev"
 # tenant_id       = "00000000-0000-0000-0000-000000000000"
 # subscription_id = "00000000-0000-0000-0000-000000000000"
 
-primary_region_key = "weu"
+primary_region_key = "swc"
 
 regions = {
-  weu = {
-    location     = "westeurope"
+  swc = {
+    location     = "swedencentral"
     vnet_cidr    = "10.10.0.0/16"
     node_vm_size = "Standard_D2ds_v5"
     node_min     = 2
     node_max     = 5
   }
-  neu = {
-    location     = "northeurope"
+  usw = {
+    location     = "westus"
     vnet_cidr    = "10.20.0.0/16"
     node_vm_size = "Standard_D2ds_v5"
     node_min     = 2
