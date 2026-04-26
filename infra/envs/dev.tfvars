@@ -10,14 +10,14 @@ regions = {
   swc = {
     location     = "swedencentral"
     vnet_cidr    = "10.10.0.0/16"
-    node_vm_size = "Standard_D2ds_v5"
+    node_vm_size = "Standard_D8ds_v5"
     node_min     = 2
     node_max     = 5
   }
   eus = {
     location     = "eastus"
     vnet_cidr    = "10.20.0.0/16"
-    node_vm_size = "Standard_D2ds_v5"
+    node_vm_size = "Standard_D8ds_v5"
     node_min     = 2
     node_max     = 5
   }
