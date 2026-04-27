@@ -16,7 +16,8 @@ resource "azurerm_container_registry" "this" {
   location                      = var.location
   sku                           = "Premium"
   admin_enabled                 = false
-  public_network_access_enabled = false
+  public_network_access_enabled = true
+  network_rule_bypass_option    = "AzureServices"
   zone_redundancy_enabled       = true
   anonymous_pull_enabled        = false
   data_endpoint_enabled         = true
@@ -25,6 +26,10 @@ resource "azurerm_container_registry" "this" {
 
   retention_policy_in_days = var.retention_days
   trust_policy_enabled     = true
+
+  network_rule_set {
+    default_action = "Deny"
+  }
 
   dynamic "georeplications" {
     for_each = toset([for r in var.georeplication_locations : r if r != var.location])

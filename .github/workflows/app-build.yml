@@ -116,6 +116,19 @@ jobs:
             -reconfigure -input=false
           acr=$(terraform -chdir=infra output -raw acr_login_server)
           echo "acr_login_server=${acr}" >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(terraform -chdir=infra output -raw acr_name)" >> "$GITHUB_OUTPUT"
+          echo "acr_rg=$(terraform -chdir=infra output -raw global_resource_group)" >> "$GITHUB_OUTPUT"
+
+      - name: Allow runner IP in ACR
+        id: acr_allow
+        run: |
+          runner_ip=$(curl -sf https://checkip.amazonaws.com)
+          echo "runner_ip=${runner_ip}" >> "$GITHUB_OUTPUT"
+          az acr network-rule add \
+            --name "${{ steps.tfout.outputs.acr_name }}" \
+            --resource-group "${{ steps.tfout.outputs.acr_rg }}" \
+            --ip-address "${runner_ip}/32"
+          sleep 30
 
       - name: ACR login
         run: az acr login --name "${{ steps.tfout.outputs.acr_login_server }}"
@@ -149,3 +162,11 @@ jobs:
             echo "image=${{ steps.tfout.outputs.acr_login_server }}/web:${{ github.sha }}"
             echo "tag=${{ github.sha }}"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Remove runner IP from ACR
+        if: always() && steps.acr_allow.outputs.runner_ip != ''
+        run: |
+          az acr network-rule remove \
+            --name "${{ steps.tfout.outputs.acr_name }}" \
+            --resource-group "${{ steps.tfout.outputs.acr_rg }}" \
+            --ip-address "${{ steps.acr_allow.outputs.runner_ip }}/32"
