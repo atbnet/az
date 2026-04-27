@@ -16,7 +16,7 @@ resource "azurerm_container_registry" "this" {
   location                      = var.location
   sku                           = "Premium"
   admin_enabled                 = false
-  public_network_access_enabled = false
+  public_network_access_enabled = true
   zone_redundancy_enabled       = true
   anonymous_pull_enabled        = false
   data_endpoint_enabled         = true
