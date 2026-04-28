@@ -8,7 +8,7 @@ on:
     branches: [dev, main]
     paths:
       #- "app/**"
-      - ".github/workflows/app-deloy1.yml"
+      - ".github/workflows/app-deploy1.yml"
   workflow_dispatch:
   workflow_dispatch:
     inputs:
