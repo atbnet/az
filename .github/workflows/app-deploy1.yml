@@ -4,6 +4,12 @@ on:
   #workflow_run:
     #workflows: [app-build]
     #types: [completed]
+  push:
+    branches: [dev, main]
+    paths:
+      #- "app/**"
+      - ".github/workflows/app-deloy1.yml"
+  workflow_dispatch:
   workflow_dispatch:
     inputs:
       env:
