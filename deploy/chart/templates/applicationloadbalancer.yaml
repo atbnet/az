@@ -1,0 +1,11 @@
+{{- if .Values.agc.subnetId -}}
+apiVersion: alb.networking.azure.io/v1
+kind: ApplicationLoadBalancer
+metadata:
+  name: {{ .Values.agc.albName }}
+  namespace: {{ .Values.agc.controllerNamespace }}
+  labels: {{- include "web.labels" . | nindent 4 }}
+spec:
+  associations:
+    - {{ .Values.agc.subnetId | quote }}
+{{- end -}}

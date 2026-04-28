@@ -1,0 +1,34 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "web.fullname" . }}
+  labels: {{- include "web.labels" . | nindent 4 }}
+  annotations:
+    alb.networking.azure.io/alb-namespace: {{ .Values.agc.controllerNamespace | quote }}
+    alb.networking.azure.io/alb-name: {{ .Values.agc.albName | quote }}
+spec:
+  gatewayClassName: azure-alb-external
+  addresses:
+    - type: alb.networking.azure.io/alb-frontend
+      value: {{ .Values.agc.frontendName | quote }}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- if .Values.agc.tls.enabled }}
+    - name: https
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            group: ""
+            name: {{ required "agc.tls.secretName is required when agc.tls.enabled is true" .Values.agc.tls.secretName | quote }}
+    {{- end }}

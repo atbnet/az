@@ -1,0 +1,36 @@
+# Node
+node_modules/
+npm-debug.log*
+.npm
+.pnpm-debug.log*
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+tfplan
+tfplan.*
+*.auto.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,100 @@
+nameOverride: ""
+fullnameOverride: ""
+
+env: dev
+region: weu
+appVersion: ""
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+service:
+  port: 80
+  targetPort: 8080
+
+podLabels: {}
+podAnnotations: {}
+
+nodeSelector: {}
+tolerations: []
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Application Gateway for Containers (AGC) wiring.
+# The Azure resources are created by Terraform. The ALB Controller is
+# installed cluster-wide in the `azure-alb-system` namespace by the
+# `bootstrap-clusters` workflow step. This chart only creates the
+# per-app Gateway API + AGC custom resources.
+agc:
+  # Namespace where the ApplicationLoadBalancer CR and Gateway live.
+  namespace: web
+  # Namespace where the ALB Controller is installed (shared across apps).
+  controllerNamespace: azure-alb-system
+  # Name of the shared ApplicationLoadBalancer CR.
+  albName: alb
+  # Frontend name exposed by AGC. Must match the frontend provisioned by Terraform.
+  frontendName: web-frontend
+  # AGC subnet resource ID from Terraform output.
+  # Required for the ApplicationLoadBalancer CR association.
+  subnetId: ""
+  # Hostnames this app claims on the Gateway. Populate with the AGC FQDN
+  # (a `*.fzxx.alb.azure.com` name) plus any custom domain later.
+  hostnames: []
+  # TLS: `tls.mode=Terminate` with a cert from a Kubernetes secret.
+  # Leave secretName empty and tls.enabled=false to listen on HTTP 80 only
+  # (useful for initial bring-up before a cert is wired).
+  tls:
+    enabled: true
+    secretName: web-tls
+
+healthCheck:
+  path: /healthz
+  intervalSeconds: 30
+  timeoutSeconds: 5
+  healthyThreshold: 1
+  unhealthyThreshold: 3
