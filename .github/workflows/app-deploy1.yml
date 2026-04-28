@@ -1,9 +1,9 @@
 name: app-deploy
 
 on:
-  workflow_run:
-    workflows: [app-build]
-    types: [completed]
+  #workflow_run:
+    #workflows: [app-build]
+    #types: [completed]
   workflow_dispatch:
     inputs:
       env:
